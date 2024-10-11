@@ -1,0 +1,20 @@
+name: Charmed OpenStack
+on:
+  pull_request:
+    paths:
+      - package-regression-testing/charmed-openstack/**
+  workflow_dispatch:
+
+jobs:
+  charmed-openstack:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - "jammy-yoga:jammy-yoga"
+          - "jammy-yoga-ovs-3.3:jammy-yoga"
+          - "jammy-yoga-security:jammy-yoga"
+    uses: ./.github/workflows/func-target.yml
+    with:
+      tox-config-file: package-regression-testing/charmed-openstack/tox.ini
+      target: ${{ matrix.target }}

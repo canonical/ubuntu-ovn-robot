@@ -1,0 +1,58 @@
+charm_name: neutron-api-plugin-ovn
+
+smoke_bundles:
+  - jammy-yoga: jammy-yoga
+  - jammy-yoga-ovs-3.3: jammy-yoga
+  - jammy-yoga-security: jammy-yoga
+
+target_deploy_status:
+  neutron-api-plugin-ovn:
+    workload-status: waiting
+    workload-status-message-prefix: "'certificates' awaiting server certificate data, 'ovsdb-cms' incomplete"
+  ovn-central:
+    workload-status: waiting
+    workload-status-message-prefix: "'ovsdb-peer' incomplete, 'certificates' awaiting server certificate data"
+  ovn-chassis:
+    workload-status: waiting
+    workload-status-message-prefix: "'certificates' awaiting server certificate data"
+  vault:
+    workload-status: blocked
+    workload-status-message-prefix: Vault needs to be initialized
+
+configure_options:
+  hypervisor_application: 'nova-compute'
+configure:
+  - jammy-yoga: &jammy-yoga-configure
+    - zaza.openstack.charm_tests.vault.setup.auto_initialize_no_validation
+    - zaza.openstack.charm_tests.glance.setup.add_lts_image
+    - zaza.openstack.charm_tests.neutron.setup.basic_overcloud_network
+    - zaza.openstack.charm_tests.nova.setup.create_flavors
+    - zaza.openstack.charm_tests.nova.setup.manage_ssh_key
+    - zaza.openstack.charm_tests.keystone.setup.add_demo_user
+    - zaza.openstack.charm_tests.keystone.setup.add_tempest_roles
+    - zaza.openstack.charm_tests.glance.setup.add_cirros_image
+    - zaza.openstack.charm_tests.glance.setup.add_cirros_alt_image
+  - jammy-yoga-ovs-3.3: *jammy-yoga-configure
+  - jammy-yoga-security: *jammy-yoga-configure
+
+tests_options:
+  jammy-yoga-ovs-3.3:
+    overlay_ppas:
+      - ppa:canonical-openstack/ovs-3.3-jammy-proposed
+  jammy-yoga-security:
+    overlay_ppas:
+      - ppa:ubuntu-security-proposed/ppa
+  tempest:
+    jammy-yoga: &jammy-yoga-tempest
+      smoke: True
+      serial: False
+      concurrency: 4
+      keep-workspace: True
+    jammy-yoga-ovs-3.3: *jammy-yoga-tempest
+    jammy-yoga-security: *jammy-yoga-tempest
+tests:
+  - jammy-yoga: &jammy-yoga-tests
+    - zaza.openstack.charm_tests.status.tests.ProposedPackageReport
+    - zaza.openstack.charm_tests.tempest.tests.TempestTestWithKeystoneV3
+  - jammy-yoga-ovs-3.3: *jammy-yoga-tests
+  - jammy-yoga-security: *jammy-yoga-tests
