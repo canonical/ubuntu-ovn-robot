@@ -1,0 +1,54 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Ensure apt-get does not attempt cursing at user when script is run on a TTY.
+export DEBIAN_FRONTEND=noninteractive
+APT="sudo --preserve-env=DEBIAN_FRONTEND apt-get --assume-yes --option=Dpkg::Options::=--force-confold"
+
+sources_list=/etc/apt/sources.list.d/ubuntu.sources
+if [ -f $sources_list ]; then
+    sudo sed -i 's/^Types: deb/Types: deb deb-src/' $sources_list
+else
+    sources_list=/etc/apt/sources.list
+    sudo sed -i 's/^# deb-src/deb-src/' /etc/apt/sources.list
+fi
+sudo apt-get update
+
+$APT install ovn-host ovn-central linux-modules-extra-$(uname -r)
+
+$APT build-dep openvswitch ovn
+
+$APT install dpkg-dev
+apt-get source ovn
+
+OVS_ORIG_VERSION=$(dpkg -l | awk '/^ii.*openvswitch-source/{print$3}')
+
+if [ -n "$PPA" ]; then
+    sudo add-apt-repository -sy ppa:fnordahl/dev
+fi
+
+$APT install openvswitch-common openvswitch-switch python3-openvswitch
+$APT install openvswitch-source=${OVS_ORIG_VERSION}
+
+$APT install conntrack curl ethtool net-tools ncat python3-pyftpdlib python3-scapy tcpdump wget
+sudo update-alternatives --set nc /usr/bin/ncat
+
+SVCS="ovn-central.service ovn-controller.service ovn-host.service ovn-northd.service ovn-ovsdb-server-nb.service ovn-ovsdb-server-sb.service ovn-ovsdb-server-nb.service ovn-ovsdb-server-sb.service ovs-record-hostname.service ovs-vswitchd.service ovsdb-server.service"
+sudo systemctl stop $SVCS
+sudo systemctl disable $SVCS
+
+OVN_UPSTREAM_VERSION=$(dpkg -l | awk '/^ii.*ovn-host/{print$3}' | cut -f1 -d-)
+
+apt-get source ovn
+cd ovn-${OVN_UPSTREAM_VERSION}
+DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" debian/rules build
+cp /usr/share/openvswitch/vswitch.ovsschema ovs/vswitchd/
+
+SKIP_UNSTABLE=yes
+RECHECK=no
+
+if [ "$TEST_RANGE" = "-k unstable" ]; then
+    SKIP_UNSTABLE=no
+    RECHECK=yes
+fi
+sudo tests/$TESTSUITE -C tests AUTOTEST_PATH="$(realpath ./tests)":"$(realpath ./ovs/tests)" ovs_srcdir="$(realpath ./ovs)" RECHECK=$RECHECK SKIP_UNSTABLE=$SKIP_UNSTABLE -j1 $TEST_RANGE
