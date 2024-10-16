@@ -1,0 +1,66 @@
+name: OVN System tests
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ovn-package-system-test.yml
+      - package-regression-testing/ovn/**
+  workflow_dispatch:
+
+jobs:
+  system-test:
+    name: ${{ matrix.os }} ${{ matrix.testsuite }} ${{ matrix.ppa }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            ppa: ""
+            test-range: "-100"
+            testsuite: system-kmod-testsuite
+            #- os: ubuntu-22.04
+            #  ppa: ""
+            #  test-range: "101-"
+            #  testsuite: system-kmod-testsuite
+            #- os: ubuntu-22.04
+            #  ppa: "ppa:fnordahl/dev"
+            #  test-range: "-100"
+            #  testsuite: system-kmod-testsuite
+            #- os: ubuntu-22.04
+            #  ppa: "ppa:fnordahl/dev"
+            #  test-range: "101-"
+            #  testsuite: system-kmod-testsuite
+            #- os: ubuntu-24.04
+            #  ppa: ""
+            #  test-range: "-100"
+            #  testsuite: system-kmod-testsuite
+            #- os: ubuntu-24.04
+            #  ppa: ""
+            #  test-range: "101-"
+            #  testsuite: system-kmod-testsuite
+            #- os: ubuntu-24.04
+            #  ppa: ""
+            #  test-range: "-k unstable"
+            #  testsuite: system-kmod-testsuite
+    runs-on: ${{ matrix.os }}
+    env:
+      PPA: ${{ matrix.ppa }}
+      TEST_RANGE: ${{ matrix.test-range }}
+      TESTSUITE: ${{ matrix.testsuite }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: System test
+        run: |
+          sudo snap refresh --channel 5.21/stable lxd \
+              || sudo snap install --channel 5.21/stable lxd
+
+          sudo lxd init --auto
+          # This is a throw-away CI environment, do not do this at home
+          sudo chmod 666 /var/snap/lxd/common/lxd/unix.socket
+
+          lxc launch ubuntu:jammy test -c security.nesting=true
+          lxc file push package-regression-testing/ovn/jammy/script test/home/ubuntu/
+
+          lxc exec test -- su - ubuntu -c ./script
