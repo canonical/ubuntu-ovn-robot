@@ -1,0 +1,17 @@
+name: principal
+type: charm
+summary: Minimal machine charm.
+description: Minimal machine charm.
+base: @@BASE@@
+platforms:
+  amd64:
+
+parts:
+  principal:
+    plugin: charm
+    source: .
+  hooks:
+    plugin: dump
+    source: .
+    prime:
+      - hooks/*

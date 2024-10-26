@@ -1,0 +1,68 @@
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  charm:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - base: ubuntu@20.04
+          - base: ubuntu@22.04
+          - base: ubuntu@24.04
+    runs-on: [self-hosted, linux, AMD64, X64, xlarge, jammy]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -yq snapd
+          sudo systemctl enable snapd
+          sudo systemctl restart snapd
+          sudo snap refresh --channel 5.21/stable lxd \
+              || sudo snap install --channel 5.21/stable lxd
+          sudo snap install --channel 3.5/stable juju
+          sudo snap install --classic --channel 3.x/stable charmcraft
+
+      - name: Clear FORWARD firewall rules
+        run: |
+          set -euxo pipefail
+          # Docker can inject rules causing firewall conflicts
+          sudo iptables -P FORWARD ACCEPT  || true
+          sudo ip6tables -P FORWARD ACCEPT || true
+          sudo iptables -F FORWARD  || true
+          sudo ip6tables -F FORWARD || true
+
+      - name: Configure LXD
+        run: |
+          set -euxo pipefail
+          sudo lxd init --auto
+
+          # This is a throw-away CI environment, do not do this at home
+          sudo chmod 666 /var/snap/lxd/common/lxd/unix.socket
+
+      - name: Bootstrap Juju
+        run: |
+          set -euxo pipefail
+          juju bootstrap localhost
+
+      - name: wip
+        run: |
+          set -euxo pipefail
+          sed -e 's/@@BASE@@/${{ matrix.base }}/' \
+              charm/principal/charmcraft.in > charm/principal/charmcraft.yaml
+          charmcraft pack -v -p charm/principal
+          juju add-model principal
+          juju deploy -n1 ./principal_amd64.charm
+          n=30
+          while [ $n -ge 0 ]; do
+              juju status
+              n=$((n-1))
+              sleep 5
+          done
+          juju debug-log
