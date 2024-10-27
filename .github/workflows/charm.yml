@@ -4,14 +4,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  metadata:
+    name: Generate matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install curl jq
+      - name: Generate matrix
+        id: generate-matrix
+        run: |
+          set -euxo pipefail
+          curl -s https://api.launchpad.net/devel/ubuntu/series \
+              > ubuntu-series.json
+          jq '.entries[] | select((.status=="Supported") and
+                                  (.version>="20.04")) |
+              {"base": ("ubuntu@" + .version),
+               "charmcraft-channel": "3.x/stable"}' \
+                  ubuntu-series.json | jq -cs > base.json
+          jq '.entries[] | select(.status=="Current Stable Release") |
+              {"base": ("ubuntu@" + .version),
+               "charmcraft-channel": "latest/stable"}' \
+                  ubuntu-series.json | jq -cs > dev-base.json
+              echo matrix=$(jq -cs '{"charm":(.[0] + .[1])}' \
+              base.json dev-base.json) | tee -a ${GITHUB_OUTPUT}
   charm:
+    needs:
+      - metadata
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - base: ubuntu@20.04
-          - base: ubuntu@22.04
-          - base: ubuntu@24.04
+      matrix: ${{ fromJson(needs.metadata.outputs.matrix) }}
     runs-on: [self-hosted, linux, AMD64, X64, xlarge, jammy]
     steps:
       - name: Checkout code
@@ -27,7 +55,10 @@ jobs:
           sudo snap refresh --channel 5.21/stable lxd \
               || sudo snap install --channel 5.21/stable lxd
           sudo snap install --channel 3.5/stable juju
-          sudo snap install --classic --channel 3.x/stable charmcraft
+          sudo snap install \
+              --classic \
+              --channel ${{ matrix.charm.charmcraft-channel }} \
+              charmcraft
 
       - name: Clear FORWARD firewall rules
         run: |
@@ -54,7 +85,7 @@ jobs:
       - name: wip
         run: |
           set -euxo pipefail
-          sed -e 's/@@BASE@@/${{ matrix.base }}/' \
+          sed -e 's/@@BASE@@/${{ matrix.charm.base }}/' \
               charm/principal/charmcraft.in > charm/principal/charmcraft.yaml
           charmcraft pack -v -p charm/principal
           juju add-model principal
