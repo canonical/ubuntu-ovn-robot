@@ -53,6 +53,7 @@ tests_options:
 tests:
   - jammy-yoga: &jammy-yoga-tests
     - zaza.openstack.charm_tests.status.tests.ProposedPackageReport
+    - zaza.openstack.charm_tests.status.tests.PPAPackageReport
     - zaza.openstack.charm_tests.tempest.tests.TempestTestWithKeystoneV3
   - jammy-yoga-ovs-3.3: *jammy-yoga-tests
   - jammy-yoga-security: *jammy-yoga-tests

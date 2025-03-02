@@ -1,10 +1,10 @@
 variables:
   openstack-origin: &openstack-origin distro-proposed
-  openstack-channel: &openstack-channel yoga/edge
-  ovn-channel: &ovn-channel 22.03/edge
-  mysql-channel: &mysql-channel 8.0/edge
-  vault-channel: &vault-channel 1.7/edge
-  rabbitmq-channel: &rabbitmq-channel 3.9/edge
+  openstack-channel: &openstack-channel yoga/stable
+  ovn-channel: &ovn-channel 22.03/stable
+  mysql-channel: &mysql-channel latest/edge
+  vault-channel: &vault-channel 1.8/stable
+  rabbitmq-channel: &rabbitmq-channel 3.9/stable
 
 local_overlay_enabled: False
 
@@ -134,6 +134,4 @@ relations:
   - - neutron-api:shared-db
     - mysql:shared-db
   - - placement:shared-db
-    - mysql:shared-db
-  - - vault:shared-db
     - mysql:shared-db
