@@ -1,0 +1,15 @@
+project: ubuntu-ovn-robot
+kill-timeout: 1h
+
+backends:
+  lxd:
+    vm: true
+    plan: c4-m8
+    systems:
+      @@SPREAD_SYSTEMS@@
+
+path: /home/test
+
+suites:
+  distro/:
+    summary: Distro Regression Tests
