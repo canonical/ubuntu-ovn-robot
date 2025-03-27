@@ -1,0 +1,81 @@
+name: Ubuntu Distribution Regression Testing
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  metadata:
+    name: Ubuntu supported releases
+    runs-on: ubuntu-latest
+    outputs:
+      releases: ${{ steps.generate-releases.outputs.releases }}
+    steps:
+      - name: Query Launchpad for supported releases
+        id: generate-releases
+        run: |
+          set -euxo pipefail
+          echo -n releases= >> ${GITHUB_OUTPUT}
+          curl -s https://api.launchpad.net/devel/ubuntu/series | \
+            jq '.entries[] | select(.version >= "22.04" and
+                                    (.status == "Supported" or
+                                     .status == "Current Stable Release" or
+                                     .status == "Active Development" or
+                                     .status == "Pre-release Freeze")) |
+                .name' | jq -cs | \
+            tee -a ${GITHUB_OUTPUT}
+          cat ${GITHUB_OUTPUT}
+  regress-stack:
+    needs:
+      - metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJson(needs.metadata.outputs.releases) }}
+    runs-on: [self-hosted, linux, X64, large, noble]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -yq snapd
+          sudo systemctl enable snapd
+          sudo systemctl restart snapd
+          sudo snap refresh --channel 5.21/stable lxd \
+              || sudo snap install --channel 5.21/stable lxd
+          sudo snap install --channel 1.24/stable --classic go
+          cd spread
+          go install ./...
+
+      - name: Clear FORWARD firewall rules
+        run: |
+          set -euxo pipefail
+          # Docker can inject rules causing firewall conflicts
+          sudo iptables -P FORWARD ACCEPT  || true
+          sudo ip6tables -P FORWARD ACCEPT || true
+          sudo iptables -F FORWARD  || true
+          sudo ip6tables -F FORWARD || true
+
+      - name: Configure LXD
+        run: |
+          set -euxo pipefail
+          sudo snap set lxd daemon.group=adm
+          sudo lxd init --auto
+
+      - name: Spread
+        run: |
+          set -euxo pipefail
+          RELEASES=${{ matrix.release }} ./boot.sh
+          mkdir /tmp/artifacts
+          $HOME/go/bin/spread -reuse -artifacts /tmp/artifacts
+
+      - name: Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.release }}-artifacts
+          path: /tmp/artifacts

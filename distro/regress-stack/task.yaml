@@ -1,0 +1,71 @@
+summary: regress-stack
+
+prepare: |
+  if ! grep -q 127.0.1.1 /etc/hosts; then
+    echo "127.0.1.1 $(hostname)" >> /etc/hosts
+  fi
+  if [ -n "${ENABLE_PROPOSED:-}" ]; then
+    cat <<EOF > /etc/apt/preferences.d/proposed-updates
+  Package: *
+  Pin: release a=*-proposed
+  Pin-Priority: 500
+  EOF
+    codename=$(lsb_release -sc)
+    if [ "$codename" = "jammy" ]; then
+      echo \
+        "deb http://archive.ubuntu.com/ubuntu " \
+        "${codename}-proposed main restricted" \
+        >> /etc/apt/sources.list
+    else
+      sed -ie "/^Suites:.*updates/ s/$/ ${codename}-proposed/" \
+        /etc/apt/sources.list.d/ubuntu.sources
+    fi
+  fi
+  if [ -n "${PPA:-}" ]; then
+    add-apt-repository -y $PPA
+  fi
+  apt-get update
+  apt-get -y install \
+    build-essential \
+    crudini \
+    glance-api \
+    keystone \
+    libapt-pkg-dev \
+    mysql-server \
+    neutron-ovn-metadata-agent \
+    neutron-server \
+    nova-api \
+    nova-compute \
+    nova-conductor \
+    nova-scheduler \
+    nova-spiceproxy \
+    openvswitch-switch \
+    ovn-central \
+    ovn-host \
+    placement-api \
+    python3-all-dev \
+    python3-apt \
+    python3-networkx \
+    python3-openstackclient \
+    python3-tempestconf \
+    rabbitmq-server \
+    spice-html5 \
+    tempest
+  rm -rf regress-stack
+  git clone https://github.com/canonical/regress-stack.git
+  cd regress-stack/src
+  python3 -m regress_stack plan | tee -a task.out
+  python3 -m regress_stack setup | tee -a task.out
+
+execute: |
+  output=$(realpath ./execute-output.txt)
+  echo "Proposed packages:" | tee -a $output
+  apt list --installed |grep proposed | tee -a $output
+  echo "PPA packages:" | tee -a $output
+  apt list '?narrow(?installed,?origin(LP-PPA.*))' | tee -a $output
+
+  cd regress-stack/src
+  python3 -m regress_stack test --concurrency auto | tee -a $output
+
+artifacts:
+  - execute-output.txt
