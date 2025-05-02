@@ -8,12 +8,7 @@ jobs:
   tests:
     runs-on: [self-hosted, self-hosted-linux-s390x-noble-edge]
     steps:
-    - name: checkout OVN
-      uses: actions/checkout@v4
-      with:
-        repository: 'ovn-org/ovn'
-        path: 'ovn'
-        submodules: recursive
+    - uses: actions/checkout@v4
 
     - name: run
       run: |
@@ -21,14 +16,22 @@ jobs:
         sudo apt update
         sudo apt -y install automake libtool gcc bc libssl-dev llvm-dev \
             libelf-dev libnuma-dev libpcap-dev ncat libunbound-dev \
-            libunwind-dev libudev-dev python3-pip
+            libunwind-dev libudev-dev python3-pip net-tools
         sudo update-alternatives --set nc /usr/bin/ncat
+
+        git clone https://github.com/ovn-org/ovn.git
+        pushd ovn
+        git submodule update --init --recursive
+        popd
 
         pushd ovn/ovs
         ./boot.sh && ./configure && make -j$(nproc)
         popd
 
         pushd ovn
+        git config user.name "Ubuntu OVN Robot"
+        git config user.email "ubuntu-ovn-eng@lists.launchpad.net"
+        git am < ../0001-tests-Don-t-assume-first-bucket-will-be-chosen.patch
         ./boot.sh && ./configure && make -j$(nproc)
-        make check-kernel SUDO="sudo -E" TESTSUITEFLAGS=19
+        make check-kernel SUDO="sudo -E" TESTSUITEFLAGS=19 || cat tests/system-kmod-testsuite.log
         popd
