@@ -1,0 +1,21 @@
+name: OVN coverage
+on:
+  - pull_request
+
+
+jobs:
+  cover:
+    runs-on: ubuntu-latest
+    name: Build and test OVN with coverage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt install -yqq just
+
+      - name: Run coverage
+        run: |
+          sudo just bootstrap ovn
+          sudo just cover ovn
+
