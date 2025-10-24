@@ -1,0 +1,47 @@
+name: OVN and OVS coverage
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Run workflows weekly, 02:21 every Tuesday
+    - cron: "21 2 * * 3"
+
+jobs:
+  coverage:
+    runs-on: [self-hosted, amd64, tiobe, noble]
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ["ovn", "ovs"]
+
+    name: "${{ matrix.project }}: Build and test with coverage"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt install -yqq just
+
+      - name: Run tests with coverage
+        run: |
+          just bootstrap ${{ matrix.project }}
+          just cover ${{ matrix.project }}
+
+      - name: Upload unit test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project }}_unit_test_coverage
+          path: .coverage/cobertura.xml
+          include-hidden-files: true
+
+      - name: Upload coverage report to TIOBE TICS
+        uses: tiobe/tics-github-action@v3
+        env:
+          TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
+        with:
+          mode: qserver
+          project: ${{ matrix.project }}
+          branchdir: "${{ github.workspace }}/workspace/${{ matrix.project }}/"
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
