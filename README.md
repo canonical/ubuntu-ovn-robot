@@ -45,7 +45,7 @@ just cover ovn
 
 This step will run unit tests and output two types of coverage reports. One is
 the native `lcov` report produced in `./workspace/ovn/tests/lcov/`, and the
-other is the `cobertura` XML file in `.coverage/cobertura.xml`
+other is the `cobertura` XML file in `./workspace/ovn/.coverage/cobertura.xml`
 
 To clean up the workspace afterwards, you can run
 

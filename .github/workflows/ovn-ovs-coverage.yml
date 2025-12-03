@@ -31,7 +31,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.project }}_unit_test_coverage
-          path: .coverage/cobertura.xml
+          path: ./workspace/${{ matrix.project }}/.coverage/cobertura.xml
           include-hidden-files: true
 
       - name: Upload coverage report to TIOBE TICS
