@@ -58,14 +58,14 @@ build PROJECT: (_check_project PROJECT)
 # Run unit tests with coverage in the selected project (requires bootstrap first)
 cover PROJECT: (_check_project PROJECT) (build PROJECT)
 	cd workspace/{{PROJECT}} && make check-lcov TESTSUITEFLAGS="-j$(nproc)"
-	mkdir -p .coverage
+	mkdir -p ./workspace/{{PROJECT}}/.coverage
 	# Run gcovr from the pipx PATH
 	#
 	# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080 about the need to have
 	# suspicious_hits.warn option. Even though we compile projects with '-fprofile-update=atomic',
 	# the gcovr errro still shows up for the OVS project.
 	~/.local/bin/gcovr -r workspace/{{PROJECT}} --gcov-ignore-parse-errors=suspicious_hits.warn \
-		--merge-mode-functions=merge-use-line-min --cobertura ./.coverage/cobertura.xml
+		--merge-mode-functions=merge-use-line-min --cobertura ./workspace/{{PROJECT}}/.coverage/cobertura.xml
 
 # Cleanup selected project, or all projects (default) in the workspace
 clean PROJECT="":
