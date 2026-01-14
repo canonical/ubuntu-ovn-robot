@@ -1,0 +1,4 @@
+neutron-tempest-plugin
+tempest
+zaza @ git+https://github.com/openstack-charmers/zaza.git@bef1bdbac7ee15ae742466641c65bcab363c093e
+zaza.openstack @ git+https://github.com/fnordahl/zaza-openstack-tests.git@f7fdf96f277855584c9dc3bef5182c2a7112a35c

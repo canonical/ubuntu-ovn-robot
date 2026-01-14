@@ -1,0 +1,134 @@
+on:
+  workflow_call:
+    inputs:
+      tox-config-file:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+
+jobs:
+  func-target:
+    runs-on: [self-hosted, linux, AMD64, X64, xlarge, jammy]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -yq snapd tox
+          sudo systemctl enable snapd
+          sudo systemctl restart snapd
+          sudo snap refresh --channel 5.21/stable lxd \
+              || sudo snap install --channel 5.21/stable lxd
+          sudo snap install --channel 3.5/stable juju
+          sudo snap install --classic juju-crashdump
+
+      - name: Clear FORWARD firewall rules
+        run: |
+          set -euxo pipefail
+          # Docker can inject rules causing firewall conflicts
+          sudo iptables -P FORWARD ACCEPT  || true
+          sudo ip6tables -P FORWARD ACCEPT || true
+          sudo iptables -F FORWARD  || true
+          sudo ip6tables -F FORWARD || true
+
+      - name: Configure LXD
+        run: |
+          set -euxo pipefail
+          sudo lxd init --auto
+
+          # This is a throw-away CI environment, do not do this at home
+          sudo chmod 666 /var/snap/lxd/common/lxd/unix.socket
+
+          lxc network create second ipv4.dhcp=false
+
+      - name: Bootstrap Juju
+        run: |
+          set -euxo pipefail
+          juju bootstrap localhost
+
+      - name: Sanitize target
+        id: starget
+        run: |
+          echo "starget=$(echo ${{ inputs.target }} | sed -e 's/:/_/g')" \
+              >> $GITHUB_OUTPUT
+
+      - name: tox func-target
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/logs
+
+          # The default charm failure detection settings for Zaza are well
+          # suited for charm gates, as they error out immediately on any error
+          # condition, and having a charm go to error state may indicate
+          # that the charm needs to improve handling of unexpected situations.
+          #
+          # The use case for this job is not charm validation, it is rather
+          # validation of the underlying OVN/OVS packaging, and as such we
+          # want to make the deploy and setup phase more resilient to transient
+          # charm errors.
+          export TEST_MODEL_SETTINGS="automatically-retry-hooks=true"
+          export TEST_MAX_RESOLVE_COUNT=10
+
+          export TEST_GATEWAY=$(
+              lxc network get second ipv4.address | cut -f1 -d/)
+          export TEST_CIDR_EXT=$(
+              lxc network get second ipv4.address \
+                  | sed -e 's/.[[:digit:]]\+\//.0\//')
+          base_ip=$(lxc network get second ipv4.address | cut -f1-3 -d\.)
+          export TEST_FIP_RANGE="${base_ip}.100:${base_ip}.254"
+          export TEST_NAME_SERVER=$(
+              resolvectl status $(
+                  resolvectl default-route \
+                      | awk '/yes/{print$3}' \
+                      | tr -d \( \
+                      | tr -d \) \
+                      | tr -d \:) |awk '/Current DNS/{print$4}')
+
+          env | grep "^TEST_" \
+              > /tmp/logs/env-${{ steps.starget.outputs.starget }}.txt
+
+          tox -c ${{ inputs.tox-config-file }} \
+              -e func-target \
+              -- ${{ inputs.target }} \
+                  | tee \
+                    /tmp/logs/output-${{ steps.starget.outputs.starget  }}.txt
+
+      - name: Collect logs
+        if: always()
+        run: |
+          set -euxo pipefail
+          for model in $(
+                  juju models --format yaml \
+                      |grep "^- name:.*zaza" |cut -f2 -d/); do
+              juju-crashdump \
+                  --addon juju-show-unit \
+                  --as-root \
+                  --exclude .venv \
+                  --exclude wheelhouse \
+                  --journalctl '*' \
+                  --model $model \
+                  --output-dir /tmp/logs/ \
+                  /etc/openvswitch \
+                  /etc/ovn \
+                  /var/lib/openvswitch \
+                  /var/lib/ovn
+          done
+      - name: Upload deployment and test output logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.starget.outputs.starget }}-test-logs
+          path: /tmp/logs/
+      - name: Upload tempest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.starget.outputs.starget }}-tempest-logs
+          path: ~/.tempest/
+          include-hidden-files: true
+          if-no-files-found: ignore
