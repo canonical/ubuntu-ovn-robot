@@ -71,3 +71,16 @@ cover PROJECT: (_check_project PROJECT) (build PROJECT)
 clean PROJECT="":
 	rm -rf ./workspace/{{PROJECT}}
 
+# Update .bump file
+@bump:
+	echo '{{ \
+		"# This file is maintained by `just bump`\n" + \
+		"# Github repositories need activity at least every 60 days to keep\n" + \
+		"# scheduled workflows active [0]. Update, commit and push changes to\n" + \
+		"# this file if there was no organic activity, to keep our regular CI\n" + \
+		"# jobs alive.\n" + \
+		"# [0] https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule" \
+        }}' > .bump
+	uuidgen >> .bump
+	echo ".bump file updated."
+
