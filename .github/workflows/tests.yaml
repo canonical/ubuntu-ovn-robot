@@ -29,6 +29,7 @@ jobs:
         popd
 
         pushd ovn
+        curl https://patchwork.ozlabs.org/project/ovn/patch/20260217134731.271274-1-mj.ponsonby@canonical.com/raw/ | patch -p1 
         ./boot.sh && ./configure && make -j$(nproc)
-        make check TESTSUITEFLAGS=1005 || cat tests/testsuite.log
+        make check TESTSUITEFLAGS=1007 || cat tests/testsuite.log
         popd
