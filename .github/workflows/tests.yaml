@@ -1,0 +1,33 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: self-hosted-linux-ppc64el-noble-edge
+    steps:
+    - name: checkout OVS
+      uses: actions/checkout@v4
+      with:
+        repository: 'openvswitch/ovs'
+        path: 'ovs'
+
+    - name: run
+      run: |
+        set -euxo pipefail
+        sudo apt update
+        sudo apt -y install software-properties-common
+        sudo add-apt-repository -y ppa:matperin/ppa
+        sudo apt update
+        sudo apt -y install automake libtool gcc bc libssl-dev llvm-dev \
+            libelf-dev libnuma-dev libpcap-dev ncat libunbound-dev \
+            libunwind-dev libudev-dev python3-pip \
+            openvswitch-switch openvswitch-common
+        sudo update-alternatives --set nc /usr/bin/ncat
+
+        pushd ovs
+        ./boot.sh && ./configure && make -j$(nproc)
+        make check || cat tests/testsuite.log
+        popd
